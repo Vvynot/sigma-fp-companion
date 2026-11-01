@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fp-companion"
+version = "0.1.0"
+description = "Windows-first companion app for the SIGMA fp"
+requires-python = ">=3.11"
+dependencies = [
+  "pyside6==6.8.3",
+  "pyusb",
+  "numpy",
+  "opencv-python",
+  "rawpy",
+  "fastapi",
+  "uvicorn",
+  "pydantic",
+  "rich",
+  "typer",
+]
+
+[project.scripts]
+fp-companion = "fp_companion.__main__:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+fp_companion = ["data/*.json"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

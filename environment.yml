@@ -1,0 +1,25 @@
+name: fp-companion
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - ffmpeg
+  - libusb
+  - pip
+  - pip:
+      - pyside6==6.8.3
+      - pyusb
+      - libusb1
+      - opencv-python
+      - numpy
+      - rawpy
+      - pillow
+      - fastapi
+      - uvicorn
+      - websockets
+      - pydantic
+      - rich
+      - typer
+      - pytest
+      - pytest-qt
+      - pyinstaller
