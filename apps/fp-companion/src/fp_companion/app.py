@@ -5,6 +5,8 @@ import sys
 from PySide6.QtWidgets import QApplication, QLabel, QMainWindow, QTabWidget, QVBoxLayout, QWidget
 
 from .ui.card_studio import CardStudioWidget
+from .ui.lut_studio import LutStudioWidget
+from .ui.monitor import MonitorWidget
 
 
 def _placeholder(title: str, text: str) -> QWidget:
@@ -27,8 +29,8 @@ class MainWindow(QMainWindow):
         tabs = QTabWidget()
         tabs.addTab(_placeholder("Dashboard", "Camera, card, and firmware status will appear here."), "Dashboard")
         tabs.addTab(CardStudioWidget(), "Card Studio")
-        tabs.addTab(_placeholder("LUT Studio", "Import .cube files, preview, and write a LUT SUP card."), "LUT Studio")
-        tabs.addTab(_placeholder("Monitor", "UVC live view with scopes, LUT, and false color."), "Monitor")
+        tabs.addTab(LutStudioWidget(), "LUT Studio")
+        tabs.addTab(MonitorWidget(), "Monitor")
         tabs.addTab(_placeholder("Tether", "PTP control, capture, and recording."), "Tether")
         tabs.addTab(_placeholder("Offload", "Checksum copy, proxies, and CinemaDNG packing."), "Offload")
         self.setCentralWidget(tabs)
