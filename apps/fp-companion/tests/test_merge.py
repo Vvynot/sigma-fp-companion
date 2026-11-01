@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from fp_companion.core.merge import (
     MAX_MODULES,
     MERGE_NOTE,
@@ -251,6 +253,104 @@ def test_duplicate_paths_are_case_insensitive() -> None:
 
     assert plan.ok
     assert _codes(plan, "warning").count("duplicate-path") == 1
+
+
+@pytest.mark.parametrize(
+    ("first_path", "second_path"),
+    [
+        ("fpSup//GYRO.BIN", "fpSup/GYRO.BIN"),
+        ("fpSup/GYRO.BIN/", "fpSup/GYRO.BIN"),
+        ("./fpSup/GYRO.BIN", "fpSup/GYRO.BIN"),
+        ("fpSup\\GYRO.BIN", "fpSup/GYRO.BIN"),
+        ("fpSup\\.\\GYRO.BIN", "fpSup/GYRO.BIN"),
+    ],
+)
+def test_equivalent_payload_paths_are_duplicates(
+    first_path: str, second_path: str
+) -> None:
+    first = _release(
+        "gyro",
+        directory="fpsup-gyro-v1.14.0",
+        files=(ReleaseFile(first_path, 10, SHA_A),),
+    )
+    second = _release(
+        "raw-view",
+        version="0.3.0test",
+        directory="fpsup-raw-view-v0.3.0test",
+        files=(ReleaseFile(second_path, 10, SHA_A),),
+    )
+
+    plan = plan_merge([first, second])
+
+    assert plan.ok
+    assert _codes(plan, "warning").count("duplicate-path") == 1
+
+
+@pytest.mark.parametrize(
+    ("first_directory", "second_directory"),
+    [
+        ("fpsup-gyro//v1.0", "fpsup-gyro/v1.0"),
+        ("fpsup-gyro/v1.0/", "fpsup-gyro/v1.0"),
+        ("./fpsup-gyro/v1.0", "fpsup-gyro/v1.0"),
+        ("fpsup-gyro\\v1.0", "fpsup-gyro/v1.0"),
+    ],
+)
+def test_equivalent_release_directories_are_duplicates(
+    first_directory: str, second_directory: str
+) -> None:
+    first = _release("gyro", directory=first_directory)
+    second = _release(
+        "raw-view",
+        version="0.3.0test",
+        directory=second_directory,
+        files=(ReleaseFile("fpSup/RAWV.BIN", 10, SHA_B),),
+    )
+
+    plan = plan_merge([first, second])
+
+    assert not plan.ok
+    assert "duplicate-directory" in _codes(plan, "error")
+
+
+def test_parent_directory_payload_path_is_rejected() -> None:
+    release = _release(
+        "gyro",
+        files=(ReleaseFile("fpSup/../GYRO.BIN", 10, SHA_A),),
+    )
+
+    plan = plan_merge([release])
+
+    assert not plan.ok
+    assert "unsafe-path" in _codes(plan, "error")
+    message = next(i.message for i in plan.issues if i.code == "unsafe-path")
+    assert "fpSup/../GYRO.BIN" in message
+
+
+def test_parent_directory_release_directory_is_rejected() -> None:
+    plan = plan_merge([_release("gyro", directory="modules/../fpsup-gyro")])
+
+    assert not plan.ok
+    assert "unsafe-path" in _codes(plan, "error")
+
+
+def test_parent_directory_paths_never_match_each_other() -> None:
+    files = (ReleaseFile("a/../b", 10, SHA_A),)
+
+    plan = plan_merge(
+        [
+            _release("gyro", directory="fpsup-gyro-v1.14.0", files=files),
+            _release(
+                "raw-view",
+                version="0.3.0test",
+                directory="fpsup-raw-view-v0.3.0test",
+                files=files,
+            ),
+        ]
+    )
+
+    assert not plan.ok
+    assert "unsafe-path" in _codes(plan, "error")
+    assert "duplicate-path" not in _codes(plan)
 
 
 def test_duplicate_path_warning_does_not_block() -> None:

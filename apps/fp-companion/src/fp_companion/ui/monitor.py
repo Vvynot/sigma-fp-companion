@@ -40,6 +40,24 @@ PREVIEW_INTERVAL_MS = 33  # ~30 fps
 MAX_READ_FAILURES = 3
 
 
+def to_display_uint8(frame: np.ndarray) -> np.ndarray:
+    """Convert a frame to uint8 for ``QImage`` display.
+
+    ``uint8`` frames pass through unchanged.  Floating-point frames use the
+    module's normalised ``0..1`` convention (the same one :func:`apply_lut`
+    uses), so they are clipped to that range and scaled by 255: a ``0.5``
+    frame becomes mid-gray instead of near-black.  Other dtypes are clipped to
+    ``0..255``.
+    """
+
+    arr = np.asarray(frame)
+    if arr.dtype == np.uint8:
+        return arr
+    if np.issubdtype(arr.dtype, np.floating):
+        return np.rint(np.clip(arr, 0.0, 1.0) * 255.0).astype(np.uint8)
+    return np.clip(arr, 0.0, 255.0).astype(np.uint8)
+
+
 class HistogramWidget(QWidget):
     """Small filled-area luma histogram drawn with QPainter."""
 
@@ -86,7 +104,17 @@ class HistogramWidget(QWidget):
 
 
 class MonitorWidget(QWidget):
-    """UVC live view with luma scope, false color and a demo LUT."""
+    """UVC live view with luma scope, false color and a demo LUT.
+
+    Construction never probes for cameras: the device list starts empty and is
+    populated only when the user clicks Refresh.  Capture runs on a QTimer in
+    the UI thread (no worker thread yet).
+
+    Lifecycle: hiding the page (for example switching tabs) pauses the timer
+    while keeping the capture open; showing the page resumes it only if it was
+    running when hidden.  ``stop()`` releases the capture and is also connected
+    to ``QApplication.aboutToQuit`` so closing the main window frees the device.
+    """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -98,6 +126,7 @@ class MonitorWidget(QWidget):
         self._last_raw_frame: np.ndarray | None = None
         self._last_image: QImage | None = None
         self._demo_lut_cache: np.ndarray | None = None
+        self._resume_on_show = False
 
         self._timer = QTimer(self)
         self._timer.setInterval(PREVIEW_INTERVAL_MS)
@@ -298,6 +327,16 @@ class MonitorWidget(QWidget):
             self.status_label.setText("Stopped.")
         self._update_controls()
 
+    def stop(self) -> None:
+        """Stop the preview and release the capture; safe to call repeatedly.
+
+        This is the shutdown hook wired to ``QApplication.aboutToQuit``; it
+        works even if the widget's ``closeEvent`` is never delivered because a
+        parent window is closing.
+        """
+
+        self.stop_preview()
+
     def _grab_frame(self) -> None:
         capture = self._capture
         if capture is None:
@@ -366,7 +405,7 @@ class MonitorWidget(QWidget):
             display = base
 
         if display.dtype != np.uint8:
-            display = np.clip(display, 0.0, 255.0).astype(np.uint8)
+            display = to_display_uint8(display)
         return np.ascontiguousarray(display), histogram
 
     def _set_preview_image(self, display: np.ndarray) -> None:
@@ -455,6 +494,26 @@ class MonitorWidget(QWidget):
         super().resizeEvent(event)
         self._update_preview_pixmap()
 
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Resume the timer only if preview was running when hidden."""
+
+        super().showEvent(event)
+        resume, self._resume_on_show = self._resume_on_show, False
+        if resume and self._capture is not None:
+            self._timer.start()
+
+    def hideEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        """Pause frame grabbing while hidden; keep the capture open.
+
+        Switching tabs hides the page, so stop the timer to avoid processing
+        frames nobody can see.  ``showEvent`` restarts it only when it was
+        running before the hide.
+        """
+
+        self._resume_on_show = self._timer.isActive()
+        self._timer.stop()
+        super().hideEvent(event)
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
-        self.stop_preview()
+        self.stop()
         super().closeEvent(event)

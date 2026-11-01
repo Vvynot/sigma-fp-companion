@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import PurePosixPath
 
 from .models import Release, ValidationIssue
 
@@ -74,13 +75,37 @@ def _ordered_unique(values: Sequence[object]) -> list[object]:
     return result
 
 
-def _path_key(path: str) -> str:
-    """Normalise a release-relative path for case-insensitive comparison."""
+def _normalise_path(path: str) -> str | None:
+    """Collapse ``path`` to a canonical card-relative POSIX path.
+
+    Backslashes are treated as separators and :class:`PurePosixPath` removes
+    redundant ``.``/empty segments and trailing slashes.  Parent traversal
+    (``..``) is rejected: ``None`` is returned as a sentinel that can never
+    compare equal to a real path, and :func:`_check_unsafe_paths` reports the
+    offending release.
+    """
 
     value = str(path).replace("\\", "/")
-    while value.startswith("./"):
-        value = value[2:]
-    return value.casefold()
+    parts = PurePosixPath(value).parts
+    if ".." in parts:
+        return None
+    if not parts:
+        return "."
+    return str(PurePosixPath(*parts))
+
+
+def _path_key(path: str) -> str | None:
+    """Normalise a release-relative path for case-insensitive comparison.
+
+    Payload paths live on the camera card's case-insensitive filesystem, so
+    keys are casefolded even when the planner runs on a case-sensitive host.
+    ``None`` is returned for paths that :func:`_normalise_path` rejects.
+    """
+
+    normalised = _normalise_path(path)
+    if normalised is None:
+        return None
+    return normalised.casefold()
 
 
 def _error(code: str, message: str) -> ValidationIssue:
@@ -155,12 +180,37 @@ def _check_module_count(
         )
 
 
+def _check_unsafe_paths(
+    selected: tuple[Release, ...], issues: list[ValidationIssue]
+) -> None:
+    """Reject release paths that try to escape the card root with ``..``."""
+
+    for release in selected:
+        candidates = [("release directory", release.directory)]
+        candidates.extend(("payload path", entry.path) for entry in release.files)
+        for label, value in candidates:
+            if _normalise_path(value) is not None:
+                continue
+            issues.append(
+                _error(
+                    "unsafe-path",
+                    f"Release {release.directory} has a {label} containing '..': "
+                    f"{value}. Parent-directory segments are not allowed in a "
+                    "merged payload.",
+                )
+            )
+
+
 def _check_duplicate_directories(
     selected: tuple[Release, ...], issues: list[ValidationIssue]
 ) -> None:
     groups: dict[str, list[Release]] = {}
     for release in selected:
-        groups.setdefault(_path_key(release.directory), []).append(release)
+        key = _path_key(release.directory)
+        if key is None:
+            # Reported separately as an unsafe-path error.
+            continue
+        groups.setdefault(key, []).append(release)
 
     for group in groups.values():
         if len(group) <= 1:
@@ -187,7 +237,12 @@ def _check_duplicate_ids(
             continue
         # Selecting the exact same directory twice is already reported as a
         # duplicate directory; only flag genuinely distinct versions here.
-        if len({_path_key(release.directory) for release in group}) <= 1:
+        keys = {
+            key
+            for release in group
+            if (key := _path_key(release.directory)) is not None
+        }
+        if len(keys) <= 1:
             continue
 
         versions = ", ".join(
@@ -211,6 +266,10 @@ def _check_duplicate_paths(
         seen_in_release: set[str] = set()
         for entry in release.files:
             key = _path_key(entry.path)
+            if key is None:
+                # Reported separately as an unsafe-path error; the sentinel
+                # must never match another path.
+                continue
             if key in seen_in_release:
                 # A duplicate inside one release is plan.py's concern.
                 continue
@@ -282,6 +341,7 @@ def plan_merge(releases: Sequence[Release]) -> MergePlan:
         _check_module_count(selected, issues)
         _check_firmware(selected, issues)
         loader = _resolve_loader(selected, issues)
+        _check_unsafe_paths(selected, issues)
         _check_duplicate_directories(selected, issues)
         _check_duplicate_ids(selected, issues)
         _check_duplicate_paths(selected, issues)

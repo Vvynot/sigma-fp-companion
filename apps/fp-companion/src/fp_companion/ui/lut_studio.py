@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import stat
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -20,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.lut import CubeLUT, parse_cube
+from ..core.lut import CubeLUT, parse_cube, validate_cube
 from ..core.models import ValidationIssue
 from ..core.plan import PROJECT_ROOT
 
@@ -101,6 +103,32 @@ def _format_issues(issues: tuple[object, ...]) -> str:
 
 def _has_errors(issues: tuple[object, ...]) -> bool:
     return any(str(getattr(issue, "severity", "")).lower() == "error" for issue in issues)
+
+
+def _is_link_or_junction(path: Path) -> bool:
+    """True when ``path`` is a symlink or a Windows junction/reparse point."""
+
+    try:
+        if path.is_symlink():
+            return True
+    except OSError:
+        pass
+
+    is_junction = getattr(path, "is_junction", None)  # Python 3.12+
+    if is_junction is not None:
+        try:
+            if is_junction():
+                return True
+        except OSError:
+            pass
+
+    if os.name == "nt":
+        try:
+            attributes = os.lstat(path).st_file_attributes
+        except (OSError, AttributeError):
+            return False
+        return bool(attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    return False
 
 
 def _format_vector(vector: tuple[float, float, float]) -> str:
@@ -381,6 +409,21 @@ class LutStudioWidget(QWidget):
             issues.append(
                 ValidationIssue("error", "target", f"Target is not a directory: {target}")
             )
+
+        lut_entry = resolved / "LUT"
+        try:
+            lut_exists = os.path.lexists(lut_entry)
+        except OSError:
+            lut_exists = False
+        if lut_exists and _is_link_or_junction(lut_entry):
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "symlink",
+                    "Refusing to stage: the target's LUT entry is a "
+                    f"symlink or junction: {lut_entry}",
+                )
+            )
         return issues
 
     def _on_validate(self) -> None:
@@ -404,7 +447,8 @@ class LutStudioWidget(QWidget):
             return
 
         target = self._target_path()
-        issues = list(core.validate_settings(self._settings_from(core)))
+        issues = list(validate_cube(self._cube))
+        issues.extend(core.validate_settings(self._settings_from(core)))
         if target is None:
             issues.append(
                 ValidationIssue("error", "target", "Choose a target directory first (Browse...).")
@@ -468,7 +512,8 @@ class LutStudioWidget(QWidget):
             return
 
         settings = self._settings_from(core)
-        issues = list(core.validate_settings(settings))
+        issues = list(validate_cube(self._cube))
+        issues.extend(core.validate_settings(settings))
         issues.extend(self._target_issues(target))
         if _has_errors(tuple(issues)):
             self.report.setPlainText(

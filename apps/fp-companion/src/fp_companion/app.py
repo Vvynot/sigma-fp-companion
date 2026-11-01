@@ -30,11 +30,18 @@ class MainWindow(QMainWindow):
         tabs.addTab(_placeholder("Dashboard", "Camera, card, and firmware status will appear here."), "Dashboard")
         tabs.addTab(CardStudioWidget(), "Card Studio")
         tabs.addTab(LutStudioWidget(), "LUT Studio")
-        tabs.addTab(MonitorWidget(), "Monitor")
+        self.monitor = MonitorWidget()
+        tabs.addTab(self.monitor, "Monitor")
         tabs.addTab(_placeholder("Tether", "PTP control, capture, and recording."), "Tether")
         tabs.addTab(_placeholder("Offload", "Checksum copy, proxies, and CinemaDNG packing."), "Offload")
         self.setCentralWidget(tabs)
         self.statusBar().showMessage("fp Companion 0.1.0 — no camera connected")
+
+        # A tab child's closeEvent is not delivered when the main window closes,
+        # so release the camera capture explicitly when the application quits.
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self.monitor.stop)
 
 
 def main() -> int:

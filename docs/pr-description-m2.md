@@ -23,9 +23,23 @@ unchanged, and the app still has six tabs.
 - **Tests**: new coverage in `test_lut.py`, `test_lut_ui.py`, `test_uvc.py`,
   `test_monitor_ui.py`, and `test_merge.py`.
 
+### Review fixes
+
+- **LUT card**: validation gate, refusal of LUT paths that escape via
+  junctions, and cleanup of partially written output.
+- **LUT Studio**: `validate_cube` runs in both Validate and Stage, fixtures use
+  17³ cubes, and symlinked sources are refused.
+- **UVC Monitor**: frames are handled as floats, no probe at construction, and
+  `stop`/`aboutToQuit` release probes.
+- **Merge planner**: normalized path comparison and rejection of unsafe `..`
+  paths.
+
+The suite now reports `175 passed`. CI also runs steps under `bash -el` and no
+longer pins `python-version`.
+
 ## Test results
 
-- Full suite from `apps/fp-companion`: `146 passed` in 1.44s
+- Full suite from `apps/fp-companion`: `175 passed` in 3.30s
   (`conda run -n fp-companion pytest -q`).
 - Offscreen Qt verification: `fp Companion tabs=6`, exit code 0
   (`QT_QPA_PLATFORM=offscreen ... python scripts/verify_qt.py`).

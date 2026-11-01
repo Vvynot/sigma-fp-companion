@@ -140,6 +140,35 @@ def test_list_uvc_devices_labels_open_indices(monkeypatch) -> None:
     assert uvc.list_uvc_devices() == ["Camera 2"]
 
 
+def test_list_uvc_devices_releases_every_probe(monkeypatch) -> None:
+    fake_cv2 = types.ModuleType("cv2")
+    fake_cv2.CAP_DSHOW = 700
+    created: list[object] = []
+
+    class FakeCapture:
+        def __init__(self, index, *args) -> None:
+            self.index = index
+            self.released = False
+            created.append(self)
+
+        def isOpened(self) -> bool:
+            if self.index == 3:
+                raise RuntimeError("backend error")
+            return self.index == 2
+
+        def release(self) -> None:
+            self.released = True
+
+    fake_cv2.VideoCapture = FakeCapture
+    monkeypatch.setitem(sys.modules, "cv2", fake_cv2)
+
+    assert uvc.list_uvc_devices(max_index=5) == ["Camera 2"]
+    # One probe per index, and every capture is released: open (2), closed
+    # (0, 1, 4) and the one whose isOpened() raised (3).
+    assert [capture.index for capture in created] == [0, 1, 2, 3, 4]
+    assert all(capture.released for capture in created)
+
+
 def test_list_uvc_devices_without_opencv(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "cv2", None)
 

@@ -392,7 +392,9 @@ def test_gamma_list_matches_product_contract() -> None:
 def staging(tmp_path: Path) -> tuple[Path, Path]:
     target = tmp_path / "staging"
     target.mkdir()
-    cube = _write_3d_cube(tmp_path / "input.cube", 2)
+    # A valid 33^3 grid: write_lut_staging now rejects invalid grids, NaN and
+    # bad domains before writing anything.
+    cube = _write_3d_cube(tmp_path / "input.cube", 33)
     return target, cube
 
 
@@ -427,8 +429,8 @@ def test_staging_happy_path(staging: tuple[Path, Path]) -> None:
     assert "not a bootable" in payload["note"].lower()
     assert payload["title"] == "identity"
     assert payload["size_1d"] == 0
-    assert payload["size_3d"] == 2
-    assert payload["grid"] == {"1d": 0, "3d": 2}
+    assert payload["size_3d"] == 33
+    assert payload["grid"] == {"1d": 0, "3d": 33}
     assert payload["domain_min"] == [0.0, 0.0, 0.0]
     assert payload["domain_max"] == [1.0, 1.0, 1.0]
     assert payload["settings"] == {
@@ -560,6 +562,134 @@ def test_staging_hash_mismatch_fails_and_removes_copy(
     assert report.cube_sha256 == _sha256(cube.read_bytes())
     assert not (target / LUT_DIR_NAME / SOURCE_NAME).exists()
     assert not (target / LUT_DIR_NAME / SETTINGS_NAME).exists()
+
+
+def test_staging_refuses_invalid_grid_without_writing(
+    staging: tuple[Path, Path], tmp_path: Path
+) -> None:
+    target, _cube = staging
+    bad = _write_3d_cube(tmp_path / "grid2.cube", 2)
+
+    report = write_lut_staging(target, bad, VALID_SETTINGS)
+
+    assert not report.ok
+    assert "grid" in _error_codes(report.issues)
+    assert not (target / LUT_DIR_NAME).exists()
+    assert not (target / LUT_DIR_NAME / SOURCE_NAME).exists()
+    assert not (target / LUT_DIR_NAME / SETTINGS_NAME).exists()
+
+
+def test_staging_refuses_nan_cube_without_writing(
+    staging: tuple[Path, Path], tmp_path: Path
+) -> None:
+    target, _cube = staging
+    bad = tmp_path / "nan.cube"
+    bad.write_text(
+        "LUT_1D_SIZE 2\nnan 0 0\ninf 1 1\n", encoding="utf-8"
+    )
+
+    report = write_lut_staging(target, bad, VALID_SETTINGS)
+
+    assert not report.ok
+    assert "nonfinite" in _error_codes(report.issues)
+    assert not (target / LUT_DIR_NAME / SOURCE_NAME).exists()
+    assert not (target / LUT_DIR_NAME / SETTINGS_NAME).exists()
+
+
+def test_staging_refuses_bad_domain_without_writing(
+    staging: tuple[Path, Path], tmp_path: Path
+) -> None:
+    target, _cube = staging
+    bad = tmp_path / "domain.cube"
+    bad.write_text(
+        "LUT_1D_SIZE 1\n"
+        "DOMAIN_MIN 1 1 1\n"
+        "DOMAIN_MAX 0 0 0\n"
+        "0.5 0.5 0.5\n",
+        encoding="utf-8",
+    )
+
+    report = write_lut_staging(target, bad, VALID_SETTINGS)
+
+    assert not report.ok
+    assert "domain" in _error_codes(report.issues)
+    assert not (target / LUT_DIR_NAME / SOURCE_NAME).exists()
+    assert not (target / LUT_DIR_NAME / SETTINGS_NAME).exists()
+
+
+def test_staging_refuses_lut_link_outside_target(
+    staging: tuple[Path, Path], tmp_path: Path
+) -> None:
+    target, cube = staging
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link = target / LUT_DIR_NAME
+    try:
+        os.symlink(outside, link, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"cannot create a directory symlink here: {exc}")
+
+    try:
+        report = write_lut_staging(target, cube, VALID_SETTINGS)
+
+        assert not report.ok
+        assert "link" in _error_codes(report.issues)
+        assert not (outside / SOURCE_NAME).exists()
+        assert not (outside / SETTINGS_NAME).exists()
+        assert link.is_symlink()
+    finally:
+        try:
+            link.unlink()
+        except OSError:
+            pass
+
+
+def test_staging_settings_failure_removes_cube_created_this_run(
+    staging: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target, cube = staging
+
+    def fail_write(path: Path, payload: dict) -> None:
+        raise OSError("simulated settings failure")
+
+    monkeypatch.setattr(lut_card, "_write_json", fail_write)
+
+    report = write_lut_staging(target, cube, VALID_SETTINGS)
+
+    assert not report.ok
+    assert "settings" in _error_codes(report.issues)
+    assert report.files == ()
+    assert not (target / LUT_DIR_NAME / SETTINGS_NAME).exists()
+    assert not (target / LUT_DIR_NAME / SOURCE_NAME).exists()
+    # The original source cube is untouched.
+    assert cube.exists()
+    assert report.cube_sha256 == _sha256(cube.read_bytes())
+
+
+def test_staging_settings_failure_keeps_preexisting_cube(
+    staging: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target, cube = staging
+    lut_dir = target / LUT_DIR_NAME
+    lut_dir.mkdir()
+    (lut_dir / SOURCE_NAME).write_bytes(b"pre-existing cube")
+    source_bytes = cube.read_bytes()
+
+    def fail_write(path: Path, payload: dict) -> None:
+        raise OSError("simulated settings failure")
+
+    monkeypatch.setattr(lut_card, "_write_json", fail_write)
+
+    report = write_lut_staging(target, cube, VALID_SETTINGS)
+
+    assert not report.ok
+    assert "settings" in _error_codes(report.issues)
+    # A pre-existing cube is replaced atomically before the settings write; it
+    # is left in place (its old bytes cannot be restored) and reported.
+    assert report.files == (f"{LUT_DIR_NAME}/{SOURCE_NAME}",)
+    assert (lut_dir / SOURCE_NAME).read_bytes() == source_bytes
+    assert not (lut_dir / SETTINGS_NAME).exists()
+    assert not (lut_dir / (SETTINGS_NAME + lut_card.TMP_SUFFIX)).exists()
 
 
 def test_staging_does_not_touch_unrelated_target_files(

@@ -48,6 +48,9 @@ def list_uvc_devices(max_index: int = 10) -> list[str]:
     Indices ``0 .. max_index - 1`` are probed briefly.  Any failure (OpenCV
     missing, backend error, or no device) is swallowed, so the result is always
     a list and this is safe to call from the UI.
+
+    Every probe capture is released in a ``finally`` block, whether or not it
+    opened, so probing never leaks a device handle.
     """
 
     try:

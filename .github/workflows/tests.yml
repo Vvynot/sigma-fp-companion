@@ -12,6 +12,13 @@ on:
 env:
   QT_QPA_PLATFORM: offscreen
 
+# setup-miniconda injects activation into the shell profile, which a login
+# shell (-l) sources.  Pin the shell so activation does not depend on the
+# action's default pwsh auto-activation.
+defaults:
+  run:
+    shell: bash -el {0}
+
 jobs:
   test:
     name: pytest (windows)
@@ -28,7 +35,6 @@ jobs:
           environment-file: environment.yml
           activate-environment: fp-companion
           auto-activate: true
-          python-version: "3.11"
 
       - name: Install fp-companion
         run: python -m pip install -e apps/fp-companion

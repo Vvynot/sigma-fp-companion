@@ -17,7 +17,9 @@ The `tests` workflow has a single job, `pytest (windows)`, on
 2. Create the `fp-companion` conda environment from `environment.yml` with
    `conda-incubator/setup-miniconda@v3` (conda-forge channel, Python 3.11,
    auto-activated). The environment file is the single source of truth for
-   dependencies; the workflow does not repeat the pip list.
+   dependencies and for the Python version; the workflow does not repeat the
+   pip list and does not pass `python-version`, which setup-miniconda ignores
+   whenever `environment-file` is set.
 3. Install the app itself in editable mode:
    `python -m pip install -e apps/fp-companion`.
 4. Run the test suite from `apps/fp-companion`: `python -m pytest -q`.
@@ -27,6 +29,30 @@ The `tests` workflow has a single job, `pytest (windows)`, on
 
 `QT_QPA_PLATFORM=offscreen` is set for the whole job so no window server or
 visible desktop is required.
+
+## Shell and conda activation
+
+Every `run` step uses an explicit Bash login shell:
+
+```yaml
+defaults:
+  run:
+    shell: bash -el {0}
+```
+
+On `windows-latest`, this is the Git Bash that ships with the runner. The
+workflow does not rely on setup-miniconda's default PowerShell
+auto-activation. With `auto-activate: true`, setup-miniconda appends its
+activation snippet to the shell profile (`.bash_profile`/`.bashrc` in the Git
+Bash home directory). The `-l` (login) flag makes Bash source that profile
+before running the step, so the `fp-companion` environment is active and its
+`python`, `pip`, and `pytest` resolve to the conda environment. `-e` makes
+Bash exit on the first failed command, so a failing step still fails the job.
+
+Because the shell is pinned at workflow level, the `working-directory` and
+`QT_QPA_PLATFORM` settings on the pytest and Qt steps behave as before:
+`working-directory: apps/fp-companion` selects the app folder and the
+workflow-level `env` block supplies the offscreen platform plugin.
 
 ## Reproducing locally
 
