@@ -81,13 +81,22 @@ SITE_LV = 0xC02BAD0C
 STOCK_LV_WORD = 0xE24DD064       # sub sp, sp, #0x64
 LV_BL_MASK, LV_BL = 0xFF000000, 0xEB000000
 
-# The live-view hook's veneer and lv_done, as read by probe_lexpo.py:
-# 0xC072E068 holds `ldr pc, [pc, #-4]`; the next word is the hook base and
-# lv_done lives at hook_base + 0x54.  Only used when the site is a BL; omitted
-# otherwise rather than guessed.
+# The live-view hook's veneer: `ldr pc, [pc, #-4]`, then the hook base.  The
+# current 30LEXPO.BIN (SHA-256 499d96e7...) puts lv_done at hook_base + 0x80;
+# the older +0x54 layout is not valid.  Only read when the site is a BL.
 CAVE_VENEER = 0xC072E068
 VENEER_LDR = 0xE51FF004
-LV_DONE_OFFSET = 0x54
+LV_DONE_OFFSET = 0x80
+
+
+def _arm_bl_target(word: int, site: int) -> int | None:
+    """Resolve an ARM ``BL`` word at ``site`` to its target, or None."""
+    if (word & 0x0F000000) != 0x0B000000:
+        return None
+    off = word & 0x00FFFFFF
+    if off & 0x00800000:
+        off -= 0x01000000
+    return (site + 8 + (off << 2)) & 0xFFFFFFFF
 
 # --- the echo-handler borrow and callfn parameter block ----------------------
 ECHO_SLOT = 0xC0BAC2F8           # command table entry 17, `echo`
@@ -548,7 +557,10 @@ class Hotload:
         """``(lv_done, address)`` if the armed hook's veneer says where it is."""
         if lv_word == STOCK_LV_WORD or lv_word & LV_BL_MASK != LV_BL:
             return None, None
-        veneer = self.mem_words(CAVE_VENEER, 2)
+        target = _arm_bl_target(lv_word, SITE_LV)
+        if target is None:
+            return None, None
+        veneer = self.mem_words(target, 2)
         if veneer[0] != VENEER_LDR or veneer[1] == 0:
             return None, None
         addr = veneer[1] + LV_DONE_OFFSET

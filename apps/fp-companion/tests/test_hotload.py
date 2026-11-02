@@ -452,20 +452,39 @@ def test_snapshot_omits_lv_done_when_disarmed() -> None:
 
 def test_snapshot_reads_lv_done_from_veneer() -> None:
     hook_base = 0x4508C314
-    done_addr = hook_base + 0x54
+    done_addr = hook_base + 0x80
+    veneer = 0xC072E100
+    off = (veneer - (SITE_LV + 8)) >> 2
+    bl = 0xEB000000 | (off & 0xFFFFFF)
     fake = _fake({
         SITE_PATCH: PATCHED_WORD,
-        SITE_LV: 0xEB000000,
+        SITE_LV: bl,
         SL_BOOK_AT: 0x44A00000,
         0x44A00000: 6,
-        CAVE_VENEER: VENEER_LDR,
-        CAVE_VENEER + 4: hook_base,
+        veneer: VENEER_LDR,
+        veneer + 4: hook_base,
         done_addr: 1,
     })
     snap = Hotload(fake).snapshot()
     assert snap["site_lv_state"] == "armed"
     assert snap["lv_done"] == 1
     assert snap["lv_done_addr"] == done_addr
+
+
+def test_snapshot_rejects_a_bl_whose_veneer_is_not_ours() -> None:
+    veneer = 0xC072E100
+    off = (veneer - (SITE_LV + 8)) >> 2
+    bl = 0xEB000000 | (off & 0xFFFFFF)
+    fake = _fake({
+        SITE_PATCH: PATCHED_WORD,
+        SITE_LV: bl,
+        SL_BOOK_AT: 0x44A00000,
+        0x44A00000: 6,
+        veneer: 0xE1A00000,          # mov r0, r0: not the ldr pc veneer
+    })
+    snap = Hotload(fake).snapshot()
+    assert snap["site_lv_state"] == "armed"
+    assert snap["lv_done"] is None and snap["lv_done_addr"] is None
 
 
 def test_probe_reports_loader_missing() -> None:
