@@ -40,6 +40,10 @@ fp-hotload release --yes
 fp-hotload load --path '\fpSup\30LEXPO.BIN' --yes
 ```
 
+`load` zeroes its path scratch after the call, so repeated loads do not trip
+the "not one of our paths" guard. If a crash left foreign data there, pass
+`--force-scratch` to overwrite it.
+
 Writes print a plan and require `--yes`. `probe`/`snapshot` never write.
 
 ## Hardware-in-the-loop suite
