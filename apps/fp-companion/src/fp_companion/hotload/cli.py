@@ -424,7 +424,7 @@ def _run(link: object, args: argparse.Namespace) -> int:
         data = hotload.snapshot()
         _emit({"command": "snapshot", **data}, args.json,
               _snapshot_lines(data))
-        return EXIT_OK
+        return EXIT_OK if data["ok"] else EXIT_VERIFY
 
     if args.command == "release":
         res = hotload.release()
