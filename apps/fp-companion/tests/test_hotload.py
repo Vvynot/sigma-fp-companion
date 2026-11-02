@@ -705,3 +705,31 @@ def test_doctor_without_a_camera_prints_windows_guidance(monkeypatch, capsys) ->
     out = capsys.readouterr().out
     assert rc == 2
     assert "Zadig" in out or "WinUSB" in out
+
+
+def test_doctor_reports_loader_not_ready(monkeypatch, capsys) -> None:
+    import fp_companion.hotload.cli as cli
+
+    fake = _fake({SL_BOOK_AT: 0, SITE_PATCH: PATCHED_WORD,
+                  SITE_LV: STOCK_LV_WORD})
+
+    class Link:
+        retries = 1
+
+        def shl(self, line):
+            return fake.shl(line)
+
+        def sh(self, line):
+            return fake.shl(line).decode("latin-1")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(cli, "open_link", lambda *args, **kwargs: Link())
+    monkeypatch.setattr(cli, "usb_device_present", lambda: (True, "found"))
+    monkeypatch.setattr(cli, "winusb_binding", lambda: (True, "WinUSB"))
+
+    rc = cli.main(["doctor"])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "loader not ready" in out

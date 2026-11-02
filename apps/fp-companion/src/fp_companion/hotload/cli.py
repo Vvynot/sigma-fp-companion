@@ -355,10 +355,13 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
             payload["probe_error"] = str(exc)
 
         shell_ok = bool(version)
-        ok = shell_ok
+        loader_ok = bool(
+            probe is not None and probe["loader_ok"] and probe["version_ok"])
+        ok = shell_ok and loader_ok
         payload.update({
             "ok": ok,
             "shell_responsive": shell_ok,
+            "loader_ready": loader_ok,
             "version": version,
         })
         if probe is not None:
@@ -402,7 +405,8 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
               f"{'loadable' if dll_ok else 'not loadable'} ({dll_detail})")
         print(f"USB binding    : {binding_detail}")
         print(f"USB device     : {present_detail}")
-        print(f"doctor         : {'OK' if ok else 'shell did not respond'}")
+        print(f"doctor         : "
+              f"{'OK' if ok else 'shell responsive; loader not ready' if shell_ok else 'shell did not respond'}")
     return EXIT_OK if ok else EXIT_VERIFY
 
 
