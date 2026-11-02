@@ -1,6 +1,7 @@
 vendor/*
 !vendor/README.md
 !vendor/VERSIONS.md
+firmware/
 __pycache__/
 *.py[cod]
 .pytest_cache/

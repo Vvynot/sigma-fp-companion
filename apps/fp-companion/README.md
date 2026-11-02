@@ -45,3 +45,9 @@ with dependency/conflict checks, byte-for-byte verification, and backup.
 Not in this MVP: multiple modules merged into one card, LUT/recipe packing,
 multi-version dependency resolution, and on-camera acceptance.
 
+## Online debugging and tests
+
+- [Hot reload](docs/hotload.md) — loader v3 service v6, `fp-hotload`, HIL suite.
+- [Online tests](docs/online-tests.md) — suites, offline tests, verified results.
+- [Windows toolchain](docs/windows.md) — WinUSB, libusb, clang, direct pyusb.
+

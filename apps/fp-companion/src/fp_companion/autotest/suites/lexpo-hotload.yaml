@@ -1,0 +1,39 @@
+# LExpo hot reload hardware-in-the-loop suite (fp 5.02, loader v3 service v6).
+#
+# This suite is entirely non-interactive.  It exercises the loader's release /
+# load_one / reload services through the fpSup shell and verifies the two LExpo
+# patch sites after every operation.
+#
+# site 0xC007F324: 0xE309C6F4 (stock, 100 s) -> 0xE309C6FC (patched, 500 s)
+# site 0xC02BAD0C: 0xE24DD064 (stock) -> BL into the cave, then self-disarms.
+# Because the LV site is armed-or-self-disarmed, its exact word is not asserted
+# here; the hotload steps verify it, and `snapshot` reports lv_done when the
+# hook exposes it.
+name: lexpo-hotload
+description: LExpo hot reload, ten reload cycles, release and reload (fp 5.02)
+steps:
+  - kind: shell
+    command: version
+    expect_contains: "5.02.0"
+  - kind: hotload
+    action: probe
+  - kind: hotload
+    action: reload
+  - kind: mem_expect
+    addr: "0xC007F324"
+    value: "0xE309C6FC"
+  - kind: hotload
+    action: snapshot
+  - kind: hotload
+    action: cycle
+    count: 10
+  - kind: hotload
+    action: release
+  - kind: mem_expect
+    addr: "0xC007F324"
+    value: "0xE309C6F4"
+  - kind: hotload
+    action: load
+    path: "\\fpSup\\30LEXPO.BIN"
+  - kind: hotload
+    action: probe
