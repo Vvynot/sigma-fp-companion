@@ -497,15 +497,18 @@ def _apply_loadlog(graph: SupGraph, events: Iterable[LoadEvent]) -> None:
             # or kind.  Keep it as observed evidence with len=4 (word) and
             # length_known=False; the solver never treats it as a declaration.
             if last_loaded is not None:
-                last_loaded.claims.append(
-                    Claim(
-                        addr=event.a,
-                        len=4,
-                        kind=KIND_UNKNOWN,
-                        source="load.log",
-                        length_known=False,
-                    )
+                claim = Claim(
+                    addr=event.a,
+                    len=4,
+                    kind=KIND_UNKNOWN,
+                    source="load.log",
+                    length_known=False,
                 )
+                if not any(
+                    old.addr == claim.addr and old.source == "load.log"
+                    for old in last_loaded.claims
+                ):
+                    last_loaded.claims.append(claim)
         elif name == "RELEASED":
             sup = graph.by_name(event.text) or last_loaded
             if sup is not None:

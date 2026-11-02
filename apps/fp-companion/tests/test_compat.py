@@ -609,3 +609,18 @@ def test_real_load_log() -> None:
     # incompatibilities; the log's own conflicts (if any) would still fail it.
     result = can_combine(graph.sups, loader_version=6)
     assert result.ok, result.reasons
+
+
+def test_repeated_loadlog_claims_are_deduped() -> None:
+    text = (
+        "0A 45000000 00000100 A.BIN\n"
+        "12 C0000000 00000000 \n"
+        "15 45000000 00000100 A.BIN\n"
+        "0A 45000000 00000100 A.BIN\n"
+        "12 C0000000 00000000 \n"
+    )
+    graph = graph_from_loadlog(text)
+    a = graph.by_name("A.BIN")
+    assert a is not None
+    observed = [c for c in a.claims if c.source == "load.log"]
+    assert [(c.addr, c.len) for c in observed] == [(0xC0000000, 4)]
