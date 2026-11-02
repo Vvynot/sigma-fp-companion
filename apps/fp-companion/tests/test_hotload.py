@@ -691,3 +691,17 @@ def test_importing_hotload_does_not_import_pyusb() -> None:
     )
     assert completed.returncode == 0, completed.stderr
     assert completed.stdout.strip() == "False"
+
+
+def test_doctor_without_a_camera_prints_windows_guidance(monkeypatch, capsys) -> None:
+    import fp_companion.autotest.session as session_mod
+    import fp_companion.hotload.cli as cli
+
+    monkeypatch.setattr(session_mod.usb.core, "find", lambda **kwargs: None)
+    monkeypatch.setattr(cli, "usb_device_present", lambda: (False, "not found"))
+    monkeypatch.setattr(cli, "winusb_binding", lambda: (False, "no device"))
+
+    rc = cli.main(["doctor"])
+    out = capsys.readouterr().out
+    assert rc == 2
+    assert "Zadig" in out or "WinUSB" in out
