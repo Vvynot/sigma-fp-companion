@@ -2,8 +2,8 @@
   "suite": "lexpo-hotload",
   "description": "LExpo hot reload, ten reload cycles, release and reload (fp 5.02)",
   "ok": true,
-  "started": "2026-11-02T17:58:58+00:00",
-  "ended": "2026-11-02T17:59:00+00:00",
+  "started": "2026-11-02T18:48:18+00:00",
+  "ended": "2026-11-02T18:48:20+00:00",
   "steps": [
     {
       "index": 0,
@@ -37,8 +37,8 @@
       "index": 4,
       "kind": "hotload",
       "ok": true,
-      "detail": "hotload snapshot: observed success (loader_ok=True patch=patched lv=armed lv_done=3850444800); expected success",
-      "observation": "loader_ok=True patch=patched lv=armed lv_done=3850444800"
+      "detail": "hotload snapshot: observed success (loader_ok=True patch=patched lv=armed lv_done=0); expected success",
+      "observation": "loader_ok=True patch=patched lv=armed lv_done=0"
     },
     {
       "index": 5,

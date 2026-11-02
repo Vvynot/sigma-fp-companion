@@ -56,7 +56,7 @@ python -m pytest -q
 | 50-cycle prototype run | PASS 50/50 |
 | release → stock, cold boot re-applies | PASS |
 | bad path `\fpSup\NOPE.BIN` | returns `-3`, sites unchanged |
-| full offline suite | 385 passed |
+| full offline suite | 387 passed |
 | compat solver | 33 passed |
 | dark-frame library | 28 passed |
 

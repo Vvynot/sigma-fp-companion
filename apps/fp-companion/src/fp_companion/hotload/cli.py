@@ -439,7 +439,8 @@ def _run(link: object, args: argparse.Namespace) -> int:
         return EXIT_OK if ok else EXIT_VERIFY
 
     if args.command == "load":
-        res = hotload.load(path=args.path, path_addr=args.path_addr)
+        res = hotload.load(path=args.path, path_addr=args.path_addr,
+                           force_scratch=args.force_scratch)
         sites = hotload.verify_sites()
         ok = res["return"] == 0 and sites["ok"]
         _emit({"command": "load", **res, "sites": sites, "ok": ok},
@@ -538,6 +539,9 @@ def build_parser() -> argparse.ArgumentParser:
                             f"(<= {PATH_BUF_BYTES} bytes with NUL)")
     group.add_argument("--path-addr", type=lambda s: int(s, 0),
                        help="address of an existing NUL-terminated path")
+    load_parser.add_argument(
+        "--force-scratch", action="store_true",
+        help="overwrite a path scratch left by a crash with foreign data")
     cycle_parser = sub.add_parser("cycle", parents=[common],
                                   help="reload N times and verify both sites "
                                        "(needs --yes)")

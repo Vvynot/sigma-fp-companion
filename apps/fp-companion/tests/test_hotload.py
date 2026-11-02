@@ -357,12 +357,29 @@ def test_load_copies_short_path() -> None:
     book, entry = 0x44A00000, 0x44CCCCE1
     fake = _fake({SL_BOOK_AT: book, book: 6, book + LOAD_ONE_OFF: entry},
                  echo_result=(0, DONE))
-    res = Hotload(fake).load(path="\\fpSup\\L.BIN")
+    res = Hotload(fake).load(path="\\fpSup\\L.BIN", clear_scratch=False)
     assert res["return"] == 0 and res["path_addr"] == PATH_BUF
     assert fake.mem[P_BLOCK + P_R1] == PATH_BUF
     raw = b"".join(struct.pack("<I", fake.mem.get(PATH_BUF + i * 4, 0))
                    for i in range(PATH_BUF_BYTES // 4))
     assert raw.startswith(b"\\fpSup\\L.BIN\0")
+
+
+def test_load_clears_scratch_by_default() -> None:
+    book, entry = 0x44A00000, 0x44CCCCE1
+    fake = _fake({SL_BOOK_AT: book, book: 6, book + LOAD_ONE_OFF: entry},
+                 echo_result=(0, DONE))
+    Hotload(fake).load(path="\\fpSup\\L.BIN")
+    assert all(fake.mem.get(PATH_BUF + i * 4, 0) == 0
+               for i in range(PATH_BUF_BYTES // 4))
+
+
+def test_force_scratch_overwrites_foreign_data() -> None:
+    book, entry = 0x44A00000, 0x44CCCCE1
+    fake = _fake({SL_BOOK_AT: book, book: 6, book + LOAD_ONE_OFF: entry,
+                  PATH_BUF: 1}, echo_result=(0, DONE))
+    res = Hotload(fake).load(path="\\fpSup\\L.BIN", force_scratch=True)
+    assert res["return"] == 0
 
 
 def test_load_rejects_long_path() -> None:

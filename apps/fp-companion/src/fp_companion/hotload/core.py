@@ -501,42 +501,59 @@ class Hotload:
         return {"return": value, "book": book, "entry": ptr}
 
     def load(self, path: str | None = None,
-             path_addr: int | None = None) -> dict:
-        """Call load_one.  ``path`` is copied to a 32-byte scratch first."""
+             path_addr: int | None = None,
+             *, clear_scratch: bool = True,
+             force_scratch: bool = False) -> dict:
+        """Call load_one.  ``path`` is copied to a 32-byte scratch first.
+
+        The scratch is zeroed after the call so a later load is not blocked by
+        this one.  ``force_scratch`` overwrites a scratch left by a crash with
+        something that is not one of our paths.
+        """
         if path is not None and path_addr is not None:
             raise UsageError("give path or path_addr, not both")
         if path is None and path_addr is None:
             raise UsageError("load needs path or path_addr")
-        if path_addr is None:
-            try:
-                raw = path.encode("ascii") + b"\0"
-            except UnicodeEncodeError as exc:
-                raise UsageError(f"path {path!r} is not ASCII") from exc
-            if len(raw) > PATH_BUF_BYTES:
-                raise UsageError(
-                    f"path {path!r} needs {len(raw)} bytes; the scratch at "
-                    f"0x{PATH_BUF:08X} holds only {PATH_BUF_BYTES} including "
-                    f"the NUL.  Use path_addr for a longer path.")
-            present = self.mem_words(PATH_BUF, PATH_BUF_BYTES // 4)
-            if any(present):
-                old = b"".join(struct.pack("<I", word) for word in present)
-                old_path = old.split(b"\0", 1)[0]
-                if not (old_path.startswith(b"\\fpSup\\")
-                        and old_path.upper().endswith(b".BIN")):
-                    raise RefuseError(
-                        f"path scratch 0x{PATH_BUF:08X} holds something that "
-                        f"is not one of our paths ({old_path!r}); refusing to "
-                        f"clobber it")
-            padded = raw + b"\0" * (-len(raw) % 4)
-            self.write_words(PATH_BUF, padded)
-            path_addr = PATH_BUF
-        elif path_addr == 0:
-            raise UsageError("path_addr is 0")
+        wrote_scratch = False
+        try:
+            if path_addr is None:
+                try:
+                    raw = path.encode("ascii") + b"\0"
+                except UnicodeEncodeError as exc:
+                    raise UsageError(f"path {path!r} is not ASCII") from exc
+                if len(raw) > PATH_BUF_BYTES:
+                    raise UsageError(
+                        f"path {path!r} needs {len(raw)} bytes; the scratch at "
+                        f"0x{PATH_BUF:08X} holds only {PATH_BUF_BYTES} including "
+                        f"the NUL.  Use path_addr for a longer path.")
+                present = self.mem_words(PATH_BUF, PATH_BUF_BYTES // 4)
+                if any(present):
+                    old = b"".join(struct.pack("<I", word) for word in present)
+                    old_path = old.split(b"\0", 1)[0]
+                    if not (old_path.startswith(b"\\fpSup\\")
+                            and old_path.upper().endswith(b".BIN")) \
+                            and not force_scratch:
+                        raise RefuseError(
+                            f"path scratch 0x{PATH_BUF:08X} holds something that "
+                            f"is not one of our paths ({old_path!r}); refusing to "
+                            f"clobber it (use force_scratch to override)")
+                padded = raw + b"\0" * (-len(raw) % 4)
+                self.write_words(PATH_BUF, padded)
+                wrote_scratch = True
+                path_addr = PATH_BUF
+            elif path_addr == 0:
+                raise UsageError("path_addr is 0")
 
-        book, ptr = self._entry(self.layout.load_one)
-        value = _signed32(self.call(ptr, r0=book, r1=path_addr))
-        return {"return": value, "book": book, "entry": ptr,
-                "path_addr": path_addr}
+            book, ptr = self._entry(self.layout.load_one)
+            value = _signed32(self.call(ptr, r0=book, r1=path_addr))
+            return {"return": value, "book": book, "entry": ptr,
+                    "path_addr": path_addr}
+        finally:
+            if wrote_scratch and clear_scratch:
+                try:
+                    self.write_words(PATH_BUF, b"\0" * PATH_BUF_BYTES)
+                except Exception:  # noqa: BLE001 - do not mask the load result
+                    pass
 
     # --- read-only views ----------------------------------------------------
     def _site_patch_state(self, word: int) -> str:
