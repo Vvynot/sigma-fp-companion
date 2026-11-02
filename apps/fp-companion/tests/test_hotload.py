@@ -578,9 +578,11 @@ def test_direct_link_uses_package_session_not_firmware_tools(monkeypatch) -> Non
             self.kwargs = kwargs
             self.retries = int(kwargs.get("retries", 3))
             self.closed = False
+            self.calls = []
 
         def sh(self, line):
-            return ""
+            self.calls.append(line)
+            return "ok"
 
         def mem_get(self, addr, size=4):
             return 0
@@ -596,6 +598,8 @@ def test_direct_link_uses_package_session_not_firmware_tools(monkeypatch) -> Non
     assert direct.session.kwargs.get("retries") == 3
     assert direct.camera is direct.session
     assert direct.retries == 3
+    assert direct.shl("version") == b"ok"
+    assert direct.session.calls == ["version"]
     direct.retries = 1
     assert direct.session.retries == 1
     direct.close()

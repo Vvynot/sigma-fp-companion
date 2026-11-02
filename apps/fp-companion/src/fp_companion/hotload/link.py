@@ -147,14 +147,6 @@ class DirectLink(CameraLink):
         # DirectLink, which exposed the camera as ``.camera``.
         self.camera = self.session
 
-    def shl(self, line: str) -> bytes:
-        return bytes(self.camera.shl(line))
-
-    def close(self) -> None:
-        close = getattr(self.camera, "close", None)
-        if callable(close):
-            close()
-
 
 def open_link(backend: str = "auto", *, timeout_ms: int | None = None,
               retries: int | None = None) -> _Link:
