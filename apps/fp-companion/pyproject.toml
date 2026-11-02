@@ -18,10 +18,12 @@ dependencies = [
   "pydantic",
   "rich",
   "typer",
+  "pyyaml",
 ]
 
 [project.scripts]
 fp-companion = "fp_companion.__main__:main"
+fp-autotest = "fp_companion.autotest.cli:main"
 
 [tool.setuptools]
 include-package-data = true
@@ -30,7 +32,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-fp_companion = ["data/*.json"]
+fp_companion = ["data/*.json", "autotest/suites/*.yaml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
