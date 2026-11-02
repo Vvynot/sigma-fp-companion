@@ -59,6 +59,7 @@ python -m pytest -q
 | full offline suite | 387 passed |
 | compat solver | 33 passed |
 | dark-frame library | 28 passed |
+| real DNG inspect/build/correct (short exposure) | PASS: 2016×1344, 4-frame master, 5502 hot pixels, TIFF written |
 
 The live run that produced these numbers is in
 [reports/2026-11-03-lexpo-hotload.md](reports/2026-11-03-lexpo-hotload.md)
