@@ -1,0 +1,79 @@
+{
+  "suite": "lexpo-hotload",
+  "description": "LExpo hot reload, ten reload cycles, release and reload (fp 5.02)",
+  "ok": true,
+  "started": "2026-11-02T18:48:18+00:00",
+  "ended": "2026-11-02T18:48:20+00:00",
+  "steps": [
+    {
+      "index": 0,
+      "kind": "shell",
+      "ok": true,
+      "detail": "reply contained '5.02.0'",
+      "observation": "model       = w71c1 \nxc version  = V91 \nrel version = 5.02.0.V91  \ngit hash    = 13aa621060efff11aaba9b21ad925005302605cf \n"
+    },
+    {
+      "index": 1,
+      "kind": "hotload",
+      "ok": true,
+      "detail": "hotload probe: observed success (loader_ok=True svc_version=6 patch=patched lv=disarmed); expected success",
+      "observation": "loader_ok=True svc_version=6 patch=patched lv=disarmed"
+    },
+    {
+      "index": 2,
+      "kind": "hotload",
+      "ok": true,
+      "detail": "hotload reload: observed success (return=0 patch=patched lv=armed); expected success",
+      "observation": "return=0 patch=patched lv=armed"
+    },
+    {
+      "index": 3,
+      "kind": "mem_expect",
+      "ok": true,
+      "detail": "addr 0xC007F324: expected 0xE309C6FC, observed 0xE309C6FC",
+      "observation": "0xE309C6FC"
+    },
+    {
+      "index": 4,
+      "kind": "hotload",
+      "ok": true,
+      "detail": "hotload snapshot: observed success (loader_ok=True patch=patched lv=armed lv_done=0); expected success",
+      "observation": "loader_ok=True patch=patched lv=armed lv_done=0"
+    },
+    {
+      "index": 5,
+      "kind": "hotload",
+      "ok": true,
+      "detail": "hotload cycle: observed success (10/10 iterations passed); expected success",
+      "observation": "10/10 iterations passed"
+    },
+    {
+      "index": 6,
+      "kind": "hotload",
+      "ok": true,
+      "detail": "hotload release: observed success (return=0 patch=stock lv=disarmed); expected success",
+      "observation": "return=0 patch=stock lv=disarmed"
+    },
+    {
+      "index": 7,
+      "kind": "mem_expect",
+      "ok": true,
+      "detail": "addr 0xC007F324: expected 0xE309C6F4, observed 0xE309C6F4",
+      "observation": "0xE309C6F4"
+    },
+    {
+      "index": 8,
+      "kind": "hotload",
+      "ok": true,
+      "detail": "hotload load: observed success (return=0 path_addr=0xC072FC90 patch=patched lv=armed); expected success",
+      "observation": "return=0 path_addr=0xC072FC90 patch=patched lv=armed"
+    },
+    {
+      "index": 9,
+      "kind": "hotload",
+      "ok": true,
+      "detail": "hotload probe: observed success (loader_ok=True svc_version=6 patch=patched lv=armed); expected success",
+      "observation": "loader_ok=True svc_version=6 patch=patched lv=armed"
+    }
+  ]
+}

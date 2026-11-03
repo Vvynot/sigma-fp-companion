@@ -37,6 +37,7 @@ VALID_STEP_KINDS = frozenset(
         "status_expect",
         "prompt",
         "wait",
+        "hotload",
     }
 )
 

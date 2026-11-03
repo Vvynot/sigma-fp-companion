@@ -198,6 +198,138 @@ def _wait(step: Step) -> StepResult:
     return _result(step, True, f"waited {seconds:g}s")
 
 
+_HOTLOAD_ACTIONS = frozenset(
+    {"probe", "snapshot", "release", "load", "reload", "cycle", "stress"}
+)
+
+
+def _hotload(step: Step, session: object) -> StepResult:
+    """Drive :mod:`fp_companion.hotload` over the live harness session.
+
+    ``action`` is one of ``probe``, ``snapshot``, ``release``, ``load``,
+    ``reload``, ``cycle`` or ``stress``.  ``path`` is required for ``load`` and
+    ``count`` selects the number of iterations for ``cycle`` (default 1) or
+    ``stress`` (default 10).  ``expect_ok`` (default true) says whether the
+    operation is expected to succeed; set it false for a negative test.
+
+    The site words are verified automatically: ``release`` uses
+    ``verify_released()``; ``load``/``reload``/``cycle``/``stress`` use
+    ``verify_sites()``.
+    """
+    raw_action = step.params.get("action")
+    if (not isinstance(raw_action, str)
+            or raw_action.strip().lower() not in _HOTLOAD_ACTIONS):
+        allowed = ", ".join(sorted(_HOTLOAD_ACTIONS))
+        return _result(
+            step, False,
+            f"hotload needs an 'action' of {allowed}; got {raw_action!r}",
+        )
+    action = raw_action.strip().lower()
+
+    default_count = 10 if action == "stress" else 1
+    raw_count = step.params.get("count", default_count)
+    if isinstance(raw_count, bool):
+        return _result(step, False, "hotload 'count' must be an integer")
+    try:
+        count = int(raw_count)
+    except (TypeError, ValueError):
+        return _result(
+            step, False, f"hotload 'count' must be an integer, got {raw_count!r}"
+        )
+    if count < 1:
+        return _result(step, False, f"hotload 'count' must be >= 1, got {count}")
+
+    expect_ok = step.params.get("expect_ok", True)
+    if not isinstance(expect_ok, bool):
+        return _result(step, False, "hotload 'expect_ok' must be a boolean")
+
+    path = step.params.get("path")
+    if action == "load":
+        if not isinstance(path, str) or not path:
+            return _result(
+                step, False, "hotload 'load' needs a non-empty 'path'")
+    elif path is not None and not isinstance(path, str):
+        return _result(step, False, "hotload 'path' must be a string")
+
+    try:
+        from ..hotload.core import Hotload
+        from ..hotload.link import CameraLink
+
+        hotload = Hotload(CameraLink(session=session))
+
+        if action == "probe":
+            data = hotload.probe()
+            actual = bool(data["ok"])
+            observation = (
+                f"loader_ok={data['loader_ok']} "
+                f"svc_version={data['svc_version']} "
+                f"patch={data['site_patch_state']} "
+                f"lv={data['site_lv_state']}"
+            )
+        elif action == "snapshot":
+            data = hotload.snapshot()
+            actual = bool(data["ok"])
+            lv_done = ("n/a" if data["lv_done"] is None
+                       else str(data["lv_done"]))
+            observation = (
+                f"loader_ok={data['loader_ok']} "
+                f"patch={data['site_patch_state']} "
+                f"lv={data['site_lv_state']} lv_done={lv_done}"
+            )
+        elif action == "release":
+            res = hotload.release()
+            sites = hotload.verify_released()
+            actual = res["return"] == 0 and bool(sites["ok"])
+            observation = (
+                f"return={res['return']} "
+                f"patch={sites['patch_state']} lv={sites['lv_state']}"
+            )
+        elif action == "reload":
+            res = hotload.reload()
+            sites = hotload.verify_sites()
+            actual = res["return"] == 0 and bool(sites["ok"])
+            observation = (
+                f"return={res['return']} "
+                f"patch={sites['patch_state']} lv={sites['lv_state']}"
+            )
+        elif action == "load":
+            res = hotload.load(path=path)
+            sites = hotload.verify_sites()
+            actual = res["return"] == 0 and bool(sites["ok"])
+            observation = (
+                f"return={res['return']} path_addr=0x{res['path_addr']:08X} "
+                f"patch={sites['patch_state']} lv={sites['lv_state']}"
+            )
+        elif action == "cycle":
+            results = hotload.cycle(count)
+            passed = sum(1 for item in results if item["ok"])
+            actual = len(results) == count and passed == count
+            observation = f"{passed}/{count} iterations passed"
+        else:  # stress
+            summary = hotload.stress(count)
+            passed = sum(1 for item in summary["results"] if item["ok"])
+            actual = bool(summary["ok"])
+            timing = ""
+            if summary["min_s"] is not None:
+                timing = (
+                    f"; min/avg/max "
+                    f"{summary['min_s'] * 1000:.1f}/"
+                    f"{summary['avg_s'] * 1000:.1f}/"
+                    f"{summary['max_s'] * 1000:.1f} ms"
+                )
+            observation = f"{passed}/{count} iterations passed{timing}"
+    except Exception as exc:  # transport, usage and verification failures
+        return _result(step, False, f"hotload {action} failed: {exc}")
+
+    ok = actual == expect_ok
+    expected = "success" if expect_ok else "failure"
+    detail = (
+        f"hotload {action}: observed {'success' if actual else 'failure'} "
+        f"({observation}); expected {expected}"
+    )
+    return _result(step, ok, detail, observation)
+
+
 def execute(step: Step, session: object, *, interactive: bool, input_fn) -> StepResult:
     """Execute one step and return its result (never raises for step failures)."""
     if step.kind == "shell":
@@ -212,4 +344,6 @@ def execute(step: Step, session: object, *, interactive: bool, input_fn) -> Step
         return _prompt(step, session, interactive=interactive, input_fn=input_fn)
     if step.kind == "wait":
         return _wait(step)
+    if step.kind == "hotload":
+        return _hotload(step, session)
     return _result(step, False, f"unknown step kind {step.kind!r}")

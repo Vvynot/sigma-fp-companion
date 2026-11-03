@@ -13,6 +13,7 @@ dependencies = [
   "numpy",
   "opencv-python",
   "rawpy",
+  "pillow",
   "fastapi",
   "uvicorn",
   "pydantic",
@@ -24,6 +25,7 @@ dependencies = [
 [project.scripts]
 fp-companion = "fp_companion.__main__:main"
 fp-autotest = "fp_companion.autotest.cli:main"
+fp-hotload = "fp_companion.hotload.cli:main"
 
 [tool.setuptools]
 include-package-data = true
