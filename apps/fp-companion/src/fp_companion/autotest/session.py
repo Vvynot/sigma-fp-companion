@@ -26,7 +26,18 @@ import zlib
 # Make direct runs with the env's python.exe work: pyusb needs libusb-1.0.dll,
 # which conda ships under Library/bin.  Adding the directory both to the DLL
 # search path (3.8+) and PATH covers the native and fallback loaders.
-def _setup_libusb_paths() -> None:
+#
+# The candidate directories are development environments that also ship shared
+# libraries other packages resolve by name (libcrypto, icu, harfbuzz, ...).
+# Once libusb is loaded they must leave the process-wide search path again, or
+# a later Python extension (PySide6/Qt, for one) loads the wrong copies and
+# fails with "the specified procedure could not be found".
+def _setup_libusb_paths() -> list:
+    """Put the development DLL directories on the search path.
+
+    Returns the resources to release once libusb has been loaded: the
+    ``os.add_dll_directory`` handles and the original ``PATH``.
+    """
     prefix = sys.prefix
     candidates = [
         os.path.join(prefix, "Library", "bin"),
@@ -35,26 +46,47 @@ def _setup_libusb_paths() -> None:
         r"E:\Softwares\miniconda\envs\fp-companion\Library\bin",
         r"E:\Softwares\miniconda\envs\fp-companion\Lib\site-packages\usb1",
     ]
+    original_path = os.environ.get("PATH", "")
+    handles: list = []
     seen: set[str] = set()
-    path_parts = os.environ.get("PATH", "").split(os.pathsep)
+    path_parts = original_path.split(os.pathsep)
     for directory in candidates:
         if directory in seen or not os.path.isdir(directory):
             continue
         seen.add(directory)
         if hasattr(os, "add_dll_directory"):
             try:
-                os.add_dll_directory(directory)
+                handles.append(os.add_dll_directory(directory))
             except OSError:
                 pass
         if directory not in path_parts:
             os.environ["PATH"] = directory + os.pathsep + os.environ.get("PATH", "")
             path_parts.append(directory)
+    return [handles, original_path]
 
 
-_setup_libusb_paths()
+def _release_libusb_paths(resources: list) -> None:
+    handles, original_path = resources
+    for handle in handles:
+        try:
+            handle.close()
+        except OSError:
+            pass
+    os.environ["PATH"] = original_path
 
+
+_resources = _setup_libusb_paths()
+
+import usb.backend.libusb1  # noqa: E402
 import usb.core  # noqa: E402  (import after the DLL path setup)
 import usb.util  # noqa: E402
+
+# Force libusb to load now, while the development directory is still on the
+# search path.  pyusb caches the library, so every later call reuses it and the
+# search path can go back to what the rest of the process expects.
+usb.backend.libusb1.get_backend()  # noqa: B018
+_release_libusb_paths(_resources)
+del _resources
 
 VID = 0x1003
 PID = 0xC432
