@@ -343,3 +343,37 @@ def test_load_suite_rejects_unknown_kind(tmp_path: Path):
     )
     with pytest.raises(ValueError, match="unknown kind"):
         load_suite(path)
+
+
+def test_libusb_path_setup_is_released_after_import(monkeypatch):
+    """The dev DLL directory must not stay on the process search path.
+
+    The transport borrows libusb from a conda ``Library/bin`` that also holds
+    shared libraries Qt resolves by name (libcrypto, icu, harfbuzz).  Leaving
+    the directory on ``PATH`` makes a later PySide6 import load the wrong
+    copies and fail, which is exactly what the released resources prevent.
+    """
+    from fp_companion.autotest import session
+
+    monkeypatch.setenv("PATH", "original")
+    closed = []
+
+    class Handle:
+        def close(self):
+            closed.append(True)
+
+    session._release_libusb_paths([[Handle()], "original"])
+    assert closed == [True]
+    assert session.os.environ["PATH"] == "original"
+
+
+def test_session_import_restores_path_and_loads_libusb():
+    from fp_companion.autotest import session
+
+    suffixes = ("library/bin", "site-packages/usb1")
+    parts = [
+        part.replace(chr(92), "/").lower()
+        for part in session.os.environ.get("PATH", "").split(session.os.pathsep)
+    ]
+    assert not any(part.endswith(suffixes) for part in parts)
+    assert session.usb.backend.libusb1._lib_object is not None
